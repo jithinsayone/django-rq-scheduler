@@ -8,7 +8,6 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.templatetags.tz import utc
-from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 import django_rq
@@ -16,13 +15,12 @@ from model_utils import Choices
 from model_utils.models import TimeStampedModel
 
 
-@python_2_unicode_compatible
 class BaseJob(TimeStampedModel):
 
     name = models.CharField(_('name'), max_length=128, unique=True)
-    callable = models.CharField(_('callable'), max_length=2048)
+    callable = models.CharField(_('callable'), max_length=5000)
     enabled = models.BooleanField(_('enabled'), default=True)
-    queue = models.CharField(_('queue'), max_length=16)
+    queue = models.CharField(_('queue'), max_length=50)
     job_id = models.CharField(
         _('job id'), max_length=128, editable=False, blank=True, null=True)
     timeout = models.IntegerField(
@@ -90,7 +88,10 @@ class BaseJob(TimeStampedModel):
         super(BaseJob, self).delete(**kwargs)
 
     def scheduler(self):
-        return django_rq.get_scheduler(self.queue)
+        scheduler = django_rq.get_scheduler(self.queue)
+        scheduler.scheduler_key = scheduler.scheduler_key + ":" + str(self.queue)
+        scheduler.scheduled_jobs_key = scheduler.scheduled_jobs_key + ":" + str(self.queue)
+        return scheduler
 
     def is_schedulable(self):
         if self.job_id:
@@ -142,6 +143,7 @@ class ScheduledJob(ScheduledTimeMixin, BaseJob):
         verbose_name = _('Scheduled Job')
         verbose_name_plural = _('Scheduled Jobs')
         ordering = ('name', )
+        db_table = "scheduled_jobs"
 
 
 class RepeatableJob(ScheduledTimeMixin, BaseJob):
@@ -189,6 +191,7 @@ class RepeatableJob(ScheduledTimeMixin, BaseJob):
         verbose_name = _('Repeatable Job')
         verbose_name_plural = _('Repeatable Jobs')
         ordering = ('name', )
+        db_table = "repeatable_jobs"
 
 
 class CronJob(BaseJob):
@@ -231,3 +234,4 @@ class CronJob(BaseJob):
         verbose_name = _('Cron Job')
         verbose_name_plural = _('Cron Jobs')
         ordering = ('name', )
+        db_table = "cron_jobs"
